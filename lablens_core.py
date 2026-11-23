@@ -6,6 +6,8 @@ CLIとして単体実行できるほか、MCPサーバーや他スクリプト�
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import argparse
 import json
 import mimetypes
@@ -18,6 +20,11 @@ from typing import Any
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
+
+DEFAULT_MAX_IMAGE_BYTES = 1_000_000  # 1MB
+DEFAULT_MAX_IMAGE_DIM = 1600         # 長辺1600px
+DEFAULT_JPEG_QUALITY = 85
+
 
 DEFAULT_BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_PROMPTS_DIR = DEFAULT_BASE_DIR / "prompts"
@@ -83,8 +90,46 @@ def load_format_config(format_id: str, prompts_dir: Path = DEFAULT_PROMPTS_DIR) 
     return json.loads(target.read_text(encoding="utf-8"))
 
 
-def _load_image_part(image_path: Path) -> types.Part:
-    """Pillow不要で画像ファイルをバイト列Partとして読み込む。"""
+
+
+
+def _find_imagemagick() -> tuple[list[str], list[str]] | None:
+    """利用可能な ImageMagick コマンド (identify用, 変換用) を返す。"""
+    if shutil.which("magick"):
+        return (["magick", "identify"], ["magick"])
+    if shutil.which("convert") and shutil.which("identify"):
+        return (["identify"], ["convert"])
+    return None
+
+
+def _get_image_dimensions(image_path: Path, identify_cmd: list[str]) -> tuple[int, int] | None:
+    """ImageMagick で画像の (幅, 高さ) を取得する。失敗時は None。"""
+    try:
+        proc = subprocess.run(
+            [*identify_cmd, "-format", "%w %h", f"{image_path}[0]"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return None
+        parts = proc.stdout.strip().split()
+        if len(parts) >= 2:
+            return int(parts[0]), int(parts[1])
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    return None
+
+
+def _load_image_part(
+    image_path: Path,
+    *,
+    max_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
+    max_dim: int = DEFAULT_MAX_IMAGE_DIM,
+    jpeg_quality: int = DEFAULT_JPEG_QUALITY,
+) -> types.Part:
+    """画像ファイルを読み込み、1MB超または長辺1600px超なら ImageMagick で自動リサイズして Part を返す。"""
     resolved = image_path.expanduser()
     if not resolved.exists():
         parent = resolved.parent
@@ -98,12 +143,80 @@ def _load_image_part(image_path: Path) -> types.Part:
             hint = f"フォルダ内のファイル候補: {', '.join(candidates) if candidates else '(なし)'}"
         raise FileNotFoundError(f"画像ファイルが見つかりません: {resolved}\n{hint}")
 
+    orig_size = resolved.stat().st_size
     mime_type, _ = mimetypes.guess_type(str(resolved))
     if not mime_type or not mime_type.startswith("image/"):
         mime_type = "image/jpeg"
+
+    im_cmds = _find_imagemagick()
+    need_resize = orig_size > max_bytes
+    dims: tuple[int, int] | None = None
+
+    if im_cmds is not None:
+        identify_cmd, convert_cmd = im_cmds
+        dims = _get_image_dimensions(resolved, identify_cmd)
+        if dims is not None and max(dims) > max_dim:
+            need_resize = True
+
+        if need_resize:
+            dim_info = f"{dims[0]}x{dims[1]}" if dims else "不明"
+            _log(
+                f"[Image] 自動リサイズ実行: {resolved.name} "
+                f"({orig_size / 1024:.1f} KB, {dim_info} -> 長辺{max_dim}px)"
+            )
+            try:
+                proc = subprocess.run(
+                    [
+                        *convert_cmd,
+                        f"{resolved}[0]",
+                        "-auto-orient",
+                        "-strip",
+                        "-resize",
+                        f"{max_dim}x{max_dim}>",
+                        "-quality",
+                        str(jpeg_quality),
+                        "jpeg:-",
+                    ],
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                )
+                if proc.returncode == 0 and proc.stdout:
+                    resized = proc.stdout
+                    _log(
+                        f"[Image] リサイズ完了: {orig_size / 1024:.1f} KB -> "
+                        f"{len(resized) / 1024:.1f} KB (image/jpeg)"
+                    )
+                    return types.Part.from_bytes(data=resized, mime_type="image/jpeg")
+
+                err_msg = proc.stderr.decode("utf-8", errors="replace").strip()
+                _log(f"[Image] 警告: ImageMagick 変換失敗のため元画像を使用します ({err_msg})")
+            except (OSError, subprocess.TimeoutExpired) as e:
+                _log(f"[Image] 警告: ImageMagick 実行エラーのため元画像を使用します ({e})")
+    elif need_resize:
+        _log(
+            f"[Image] 警告: {orig_size / 1024:.1f} KB ですが ImageMagick が未導入のため元画像をそのまま送信します "
+            "(Termux: `pkg install imagemagick`)"
+        )
+
     data = resolved.read_bytes()
     _log(f"[Image] {resolved.name} ({len(data) / 1024:.1f} KB, {mime_type})")
     return types.Part.from_bytes(data=data, mime_type=mime_type)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _build_config(
@@ -194,15 +307,18 @@ def _generate_with_fallback(
                     raise
 
                 # 503 (高負荷) / 404 (モデル未対応) -> 次モデルへ自動フォールバック
-                if code in (503, 404):
+# 503 (高負荷) / 504 (タイムアウト) / 404 (モデル未対応) -> 次モデルへ自動フォールバック
+                if code in (503, 504, 404):
                     if idx + 1 < len(candidates):
-                        reason = "高負荷(503)" if code == 503 else "未対応(404)"
+                        reason_map = {503: "高負荷(503)", 504: "タイムアウト(504)", 404: "未対応(404)"}
                         _log(
-                            f"[{step_label}] [{reason}] {model_name} から "
+                            f"[{step_label}] [{reason_map[code]}] {model_name} から "
                             f"{candidates[idx + 1]} へ自動フォールバックします..."
                         )
                         break
                     raise
+
+
 
                 # その他のエラー (403 APIキー無効 等) は即座に送出
                 raise
