@@ -1,4 +1,3 @@
-cat << 'EOF' > ~/lablens/run_interactive.sh
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
@@ -8,7 +7,7 @@ CORE_SCRIPT="$BASE_DIR/lablens_core.py"
 VIEWER_SCRIPT="$BASE_DIR/viewer_tui.py"
 OUT_DIR="$BASE_DIR/output"
 
-if [[ -z "$IMAGE_PATH" \vert{}\vert{} ! -f "$IMAGE_PATH" ]]; then
+if [[ -z "$IMAGE_PATH" || ! -f "$IMAGE_PATH" ]]; then
   echo "エラー: 有効な画像パスが指定されていません: $IMAGE_PATH" >&2
   exit 1
 fi
@@ -33,8 +32,8 @@ if [[ "$SEL_INDEX" -lt 0 ]]; then
   exit 0
 fi
 
-FORMAT_ID="$(echo "$FORMATS_JSON" \vert{} jq -r ".[$SEL_INDEX].id")"
-FORMAT_LABEL="$(echo "$FORMATS_JSON" \vert{} jq -r ".[$SEL_INDEX].label")"
+FORMAT_ID="$(echo "$FORMATS_JSON" | jq -r ".[$SEL_INDEX].id")"
+FORMAT_LABEL="$(echo "$FORMATS_JSON" | jq -r ".[$SEL_INDEX].label")"
 
 # 3. 実行モード選択
 MODE_RES="$(termux-dialog radio -t "実行モードを選択" -v "2段階処理（OCR→整形：高精度）,1パス処理（無料枠RPM節約）")"
@@ -65,4 +64,23 @@ python "$CORE_SCRIPT" \
   --save-ocr "$OUT_OCR"
 
 if [[ ! -s "$OUT_JSONL" ]]; then
-  echo "警告: 抽出された検査項目が 0 件でした。OCRログを確認してください: $OUT_OCR"
+  echo "警告: 抽出された検査項目が 0 件でした。OCRログを確認してください: $OUT_OCR" >&2
+  exit 1
+fi
+
+# 5. クリップボードへコピー＆トースト通知
+termux-clipboard-set < "$OUT_JSONL" 2>/dev/null || true
+termux-toast "JSONLを保存＆コピーしました" 2>/dev/null || true
+
+# 6. Textual TUI で結果を表示（未導入時は標準出力へフォールバック）
+if [[ -f "$VIEWER_SCRIPT" ]] && python -c "import textual" 2>/dev/null; then
+  python "$VIEWER_SCRIPT" "$OUT_JSONL"
+else
+  echo ""
+  echo "--- 生成されたJSONL ---"
+  cat "$OUT_JSONL"
+  echo "-----------------------"
+  read -r -p "Enterキーで終了します..."
+fi
+
+echo "保存先: $OUT_JSONL"

@@ -1,4 +1,3 @@
-cat << 'EOF' > ~/bin/termux-file-editor
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
@@ -10,7 +9,7 @@ fi
 
 case "${TARGET_FILE,,}" in
   *.jpg|*.jpeg|*.png|*.webp|*.heic)
-    if ! ~/lablens/run_interactive.sh "$TARGET_FILE"; then
+    if ! "$HOME/lablens/run_interactive.sh" "$TARGET_FILE"; then
       echo ""
       read -r -p "エラーが発生しました。Enterキーで終了します..."
     fi
@@ -19,5 +18,3 @@ case "${TARGET_FILE,,}" in
     "${EDITOR:-vi}" "$TARGET_FILE"
     ;;
 esac
-EOF
-chmod +x ~/bin/termux-file-editor

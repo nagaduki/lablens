@@ -1,4 +1,3 @@
-cat << 'EOF' > ~/.shortcuts/lablens_camera.sh
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
@@ -17,7 +16,7 @@ while true; do
   ACT_IDX="$(echo "$ACT_RES" | jq -r '.index // 2')"
 
   if [[ "$ACT_IDX" -eq 0 ]]; then
-    if ! ~/lablens/run_interactive.sh "$PHOTO_PATH"; then
+    if ! "$HOME/lablens/run_interactive.sh" "$PHOTO_PATH"; then
       echo ""
       read -r -p "エラーが発生しました。Enterキーで終了します..."
     fi
@@ -31,5 +30,3 @@ while true; do
     break
   fi
 done
-EOF
-chmod +x ~/.shortcuts/lablens_camera.sh
