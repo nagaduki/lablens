@@ -10,16 +10,17 @@ while true; do
   echo "背面カメラ(ID:0)で撮影します..."
   termux-camera-photo -c 0 "$PHOTO_PATH"
 
-  # 撮影した画像をAndroid標準ビューアで開いて目視確認
   termux-open "$PHOTO_PATH"
   sleep 1
 
-  # 確認ダイアログ（Termuxに戻った際に選択）
   ACT_RES="$(termux-dialog radio -t "撮影画像の確認" -v "この画像でOCRを実行,撮り直す,キャンセル")"
   ACT_IDX="$(echo "$ACT_RES" | jq -r '.index // 2')"
 
   if [[ "$ACT_IDX" -eq 0 ]]; then
-    ~/lablens/run_interactive.sh "$PHOTO_PATH"
+    if ! ~/lablens/run_interactive.sh "$PHOTO_PATH"; then
+      echo ""
+      read -r -p "エラーが発生しました。Enterキーで終了します..."
+    fi
     break
   elif [[ "$ACT_IDX" -eq 1 ]]; then
     rm -f "$PHOTO_PATH"
@@ -30,8 +31,5 @@ while true; do
     break
   fi
 done
-
-echo ""
-read -r -p "Enterキーで終了します..."
 EOF
 chmod +x ~/.shortcuts/lablens_camera.sh

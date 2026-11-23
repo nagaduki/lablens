@@ -1,0 +1,23 @@
+cat << 'EOF' > ~/bin/termux-file-editor
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+TARGET_FILE="${1:-}"
+if [[ -z "$TARGET_FILE" ]]; then
+  echo "ファイルが渡されませんでした。"
+  exit 1
+fi
+
+case "${TARGET_FILE,,}" in
+  *.jpg|*.jpeg|*.png|*.webp|*.heic)
+    if ! ~/lablens/run_interactive.sh "$TARGET_FILE"; then
+      echo ""
+      read -r -p "エラーが発生しました。Enterキーで終了します..."
+    fi
+    ;;
+  *)
+    "${EDITOR:-vi}" "$TARGET_FILE"
+    ;;
+esac
+EOF
+chmod +x ~/bin/termux-file-editor
