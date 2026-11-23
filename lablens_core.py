@@ -21,12 +21,12 @@ from google.genai.errors import APIError
 
 DEFAULT_BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_PROMPTS_DIR = DEFAULT_BASE_DIR / "prompts"
-DEFAULT_ENV_FILE = Path.home() / ".lab_ocr.env"
+DEFAULT_ENV_FILE = Path.home() / ".lablens.env"
 DEFAULT_MODEL = "gemini-3.8-flash"
 
 
 def load_env_file(env_path: Path = DEFAULT_ENV_FILE) -> None:
-    """~/.lab_ocr.env から未設定の環境変数を読み込む（Termux:Widget対策）。"""
+    """~/.lablens.env から未設定の環境変数を読み込む（Termux:Widget対策）。"""
     if not env_path.exists():
         return
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
@@ -117,7 +117,7 @@ def process_image_to_jsonl(
     load_env_file()
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY が設定されていません（~/.lab_ocr.env を確認してください）")
+        raise RuntimeError("GEMINI_API_KEY が設定されていません（~/.lablens.env を確認してください）")
 
     model_name = model or os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
     fmt = load_format_config(format_id, prompts_dir)
