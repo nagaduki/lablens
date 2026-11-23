@@ -1,0 +1,26 @@
+{
+  "label": "一般採血（血算・生化学・免疫）",
+  "ocr_prompt": "この血液検査結果の画像を正確にOCRしてください。各行の「検査区分・項目名・結果値・H/L判定・単位・基準値」の対応関係が崩れないよう、1行1項目でスペースまたはタブ区切りで書き出してください。氏名やIDなど個人情報に該当する記載があっても出力から除外してください。",
+  "format_prompt": "以下のOCRテキストから検査項目を抽出し構造化してください。項目名は可能な限り標準略称（WBC, RBC, Hb, Ht, Plt, AST, ALT, γ-GTP, T-Bil, BUN, Cr, eGFR, Na, K, Cl, CRP 等）に正規化し、元の表記も括弧などで失われないよう正確に読み取ってください。判定フラグ(H, L, +, -)がない場合は空文字にしてください。",
+  "response_schema": {
+    "type": "OBJECT",
+    "properties": {
+      "records": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "category":  { "type": "STRING", "description": "検査区分（血算、生化学、凝固、免疫など）" },
+            "item":      { "type": "STRING", "description": "標準化された検査項目名" },
+            "value":     { "type": "STRING", "description": "測定値（数値・記号をそのまま文字列で）" },
+            "unit":      { "type": "STRING", "description": "単位" },
+            "flag":      { "type": "STRING", "description": "異常値フラグ（H, L 等。正常なら空文字）" },
+            "ref_range": { "type": "STRING", "description": "基準値範囲" }
+          },
+          "required": ["category", "item", "value", "unit", "flag", "ref_range"]
+        }
+      }
+    },
+    "required": ["records"]
+  }
+}

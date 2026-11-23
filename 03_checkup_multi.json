@@ -1,0 +1,25 @@
+{
+  "label": "時系列表（複数日付の比較表）",
+  "ocr_prompt": "この複数日付にわたる検査結果一覧表を、列見出し（検査日）と各行（検査項目）の対応がズレないようにMarkdownの表形式で文字起こししてください。空欄セルはハイフン(-)で明示してください。",
+  "format_prompt": "以下のMarkdown表形式のOCRテキストを、「1つの検査日 × 1つの検査項目 ＝ 1レコード」に展開（縦持ち正規化）して構造化してください。未測定（空欄やハイフン）のセルはレコードに出力しないでください。",
+  "response_schema": {
+    "type": "OBJECT",
+    "properties": {
+      "records": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "exam_date": { "type": "STRING", "description": "検査日（YYYY-MM-DD形式に正規化）" },
+            "item":      { "type": "STRING", "description": "検査項目名" },
+            "value":     { "type": "STRING", "description": "測定値" },
+            "unit":      { "type": "STRING", "description": "単位（表にあれば記載）" },
+            "flag":      { "type": "STRING", "description": "H/Lなどの異常フラグ" }
+          },
+          "required": ["exam_date", "item", "value", "unit", "flag"]
+        }
+      }
+    },
+    "required": ["records"]
+  }
+}

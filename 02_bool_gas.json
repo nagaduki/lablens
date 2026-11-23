@@ -1,0 +1,25 @@
+{
+  "label": "血液ガス分析（ABG / VBG）",
+  "ocr_prompt": "この血液ガス分析の印字結果を上から順にすべて正確に文字起こししてください。検体種別（動脈/静脈）、pH, pCO2, pO2, HCO3-, BE, SaO2, Na+, K+, Ca2+, Cl-, Glu, Lac, tHb, FiO2などの数値と単位・矢印マークを正確に保ってください。",
+  "format_prompt": "以下の血液ガス分析OCRテキストを構造化してください。小数点やマイナス符号（BEの負値など）を絶対に落とさないでください。",
+  "response_schema": {
+    "type": "OBJECT",
+    "properties": {
+      "records": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "sample_type": { "type": "STRING", "description": "検体種別（ABG, VBG, 不明）" },
+            "item":        { "type": "STRING", "description": "項目名（pH, pCO2, pO2, HCO3-, BE, Lac等）" },
+            "value":       { "type": "STRING", "description": "測定値（符号・小数点を保持）" },
+            "unit":        { "type": "STRING", "description": "単位（mmHg, mmol/L, %等）" },
+            "flag":        { "type": "STRING", "description": "上下矢印やH/Lフラグ" }
+          },
+          "required": ["sample_type", "item", "value", "unit", "flag"]
+        }
+      }
+    },
+    "required": ["records"]
+  }
+}
